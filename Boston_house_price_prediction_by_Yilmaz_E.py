@@ -11,7 +11,6 @@ from scipy import stats
 matplotlib.use('QT5Agg')
 from matplotlib import pyplot
 from matplotlib import pyplot as plt
-import helperFunctions as hf
 
 # To see all columns at once
 pd.set_option("display.max_columns", None)
@@ -20,11 +19,14 @@ pd.set_option("display.float_format", lambda x: '%.3f' % x)
 pd.set_option("display.width", 500)
 
 #####################################################################################################################
-###################################### Loading and Examining the Dataset ############################################
+###################################### Load and Examine the Dataset #################################################
 #####################################################################################################################
 
+#Load the dataset
 df = pd.read_csv('Boston_house_prices.csv')
+
 '''
+Explanations of variables:
 1) CRIM: per capita crime rate by town
 2) ZN: proportion of residential land zoned for lots over 25,000 sq.ft.
 3) INDUS: proportion of non-retail business acres per town
@@ -43,7 +45,7 @@ Output variable:
 1) MEDV: Median value of owner-occupied homes in $1000's [k$]
 '''
 
-# Examining the dataset
+# Examine the dataset
 def check_data(dataframe,head=5):
     print(20*"-" + "Information".center(20) + 20*"-")
     print(dataframe.info())
@@ -57,13 +59,17 @@ def check_data(dataframe,head=5):
     print(dataframe.isnull().sum())
     print("\n" + 40 * "-" + "Describe the Data".center(40) + 40 * "-")
     print(dataframe.describe([0.01, 0.05, 0.10, 0.50, 0.75, 0.90, 0.95, 0.99]).T)
-hf.check_data(df)
-df.head(25)
+
+check_data(df)
 '''
-506 rows and 14 columns - one of if it is the target variable.
+506 rows and 14 columns - one of the columns is the target variable.
 There is no missing data.
-All float64-type variables except CHAS and RAD being int64.
+All of the variables are numerical but CHAS is going to be converted into categorical.
+It seems that MEDV variable has a cap at 50K $.
 '''
+
+# Look at a subset to check any unusual rows
+df.head(25)   # none
 
 #####################################################################################################################
 
@@ -71,8 +77,8 @@ All float64-type variables except CHAS and RAD being int64.
 df.hist(bins=20, figsize=(15, 10))
 plt.show()
 '''
-There are skewed distributions for --> CRIM, AGE, DIS, B, LSTAT.
-There are several variables can be categorized --> ZN, INDUS, CHAS, NOX, RAD, TEX, PTRATIO.
+CRIM, AGE, DIS, B, LSTAT --> have skewed distribution. Logarithmic transformation is going to be applied.
+ZN, INDUS, CHAS, NOX, RAD, TEX, PTRATIO --> can be categorized.
 Others have normal distribution.
 '''
 
@@ -93,8 +99,9 @@ plt.figure(figsize=(15, 10))
 sns.boxplot(data=df, orient='h')
 plt.show()
 '''
-High outlier numbers are seen for --> CRIM, ZN, B
+CRIM, ZN, B --> have high outliers in number.
 There are outliers for CHAS, RM, DIS, PTRATIO, LSTAT, and MEDV but not as scatter as the variables just mentioned above.
+TAX have an interval way too large from others but it is not a problem since scaling is going to be applied.
 '''
 
 #####################################################################################################################
@@ -103,11 +110,6 @@ There are outliers for CHAS, RM, DIS, PTRATIO, LSTAT, and MEDV but not as scatte
 plt.figure(figsize=(12, 8))
 sns.heatmap(df.corr(), annot=True, cmap='coolwarm')
 plt.show()
-'''
-
-'''
-
-#####################################################################################################################
 
 # Correlation of all the variables with just the target
 # Compute the correlation matrix
@@ -119,23 +121,10 @@ target_corr = corr_matrix['MEDV'].sort_values(ascending=False)
 # Display the correlations with the target variable
 print(target_corr)
 
-# Visualize the correlations as a bar plot
-plt.figure(figsize=(8, 6))
-
-# Create a color palette based on the correlation values
-colors = target_corr.apply(lambda x: 'red' if x < 0 else 'blue')
-
-sns.barplot(x=target_corr.index, y=target_corr.values, palette=colors)
-plt.title('Correlation with MEDV')
-plt.xticks(rotation=45)
-plt.ylabel('Correlation Coefficient')
-plt.show()
-
 #####################################################################################################################
 
-# Segmentation of correlations seen in the heatmap and their report
-# Compute the correlation matrix
-corr_matrix = df.corr()
+# Check higher and lower correlations between pairs.
+# Segmentation of correlations seen in the heatmap from by 0.1 and their report
 
 # Extract the upper triangle of the correlation matrix (excluding the diagonal)
 upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
@@ -167,26 +156,7 @@ for label in labels:
 
 #####################################################################################################################
 
-# Scatter plot between RM (average number of rooms per dwelling) and PRICE
-for col in df.columns:
-    if col != 'MEDV':
-        plt.figure(figsize=(8, 6))
-        plt.scatter(df[col], df['MEDV'])
-        plt.xlabel(f'{col}')
-        plt.ylabel('MEDV')
-        plt.title(f'Relationship between {col} and MEDV')
-        plt.show()
-
-#####################################################################################################################
-
-# Joint plot between LSTAT (percentage of lower status population) and PRICE
-for col in df.columns:
-    sns.jointplot(x=f'{col}', y='MEDV', data=df, kind='reg')
-    plt.show()
-
-#####################################################################################################################
-
-# Distribution of the target variable (PRICE)
+# Distribution of the target variable (MEDV)
 sns.histplot(df['MEDV'], bins=20, kde=True)
 plt.xlabel('MEDV')
 plt.ylabel('Frequency')
@@ -204,9 +174,15 @@ for column in df.columns:
     plt.title(f'Box-and-Whisker Plot for {column}')
     plt.show()
 
+'''
+RAD, TAX. LSTAT, PTRATIO, NOX, INDUS --> have none or not significant number of outliers.
+CHAS is going to be converted as mentioned.
+Rest is going to be handled in the following.
+'''
+
 #####################################################################################################################
 
-# CRIM can be categorized into three as the ones in the interval of box-and-whisker, the outliers up to 25, and the rest
+# Categorize CRIM into three as the ones in the interval of box-and-whisker, the outliers up to 25, and the rest.
 # Calculate Q1 (25th percentile) and Q3 (75th percentile)
 Q1 = df['CRIM'].quantile(0.25)
 Q3 = df['CRIM'].quantile(0.75)
@@ -233,6 +209,7 @@ print(df[['CRIM', 'CRIM_Category']].head())
 
 #####################################################################################################################
 
+# Categorize ZN into two as outlier and non-outlier.
 # Calculate Q1 (25th percentile) and Q3 (75th percentile)
 Q1 = df['ZN'].quantile(0.25)
 Q3 = df['ZN'].quantile(0.75)
@@ -257,48 +234,24 @@ print(df[['ZN', 'ZN_Category']].head())
 
 #####################################################################################################################
 
-# Identify numerical columns
-numerical_cols = df.select_dtypes(include=[np.number]).columns
+# Step 1: Filter out all rows where MEDV is 50
+rows_with_50k = df[df['MEDV'] == 50]
 
-# Filter DataFrame to include only numerical columns
-df_numerical = df[numerical_cols]
+# Step 2: Randomly select one of these rows to keep
+row_to_keep = rows_with_50k.sample(n=1, random_state=42)
 
-# Calculate Z-scores only for numerical columns
-z_scores = np.abs((df_numerical - df_numerical.mean()) / df_numerical.std())
+# Step 3: Filter out rows with MEDV = 50 from the main DataFrame
+df_filtered = df[df['MEDV'] != 50]
 
-# Define a threshold to identify outliers
-threshold = 3
-
-# Identify outliers (returns a DataFrame with True for outliers)
-outliers = z_scores > threshold
-
-# Optionally, you can filter out the outliers for inspection
-outlier_rows = df[outliers.any(axis=1)]
-print(outlier_rows)
+# Step 4: Add the one row back to the filtered DataFrame
+df_final = pd.concat([df_filtered, row_to_keep], ignore_index=True)
+df = df_final
 
 #####################################################################################################################
 
 # Converting 'CHAS' to a categorical variable
 df['CHAS'] = df['CHAS'].astype('category')
 
-#####################################################################################################################
-
-'''
-def categorize_b(value):
-    if value <= 100:
-        return 'Low'  # 0 to 100
-    elif value <= 275:
-        return 'Moderate'  # 100 to 275
-    elif value <= 350:
-        return 'High'  # 275 to 350
-    else:
-        return 'Very High'  # Higher than 350
-
-# Apply the function to create a new column
-df['B_Category'] = df['B'].apply(categorize_b)
-
-print(df[['B', 'B_Category']].head())
-'''
 #####################################################################################################################
 
 # Identify numerical columns
@@ -336,15 +289,15 @@ plt.show()
 ###################################### Feature Engineering ##########################################################
 #####################################################################################################################
 
-df['RM_sqroot'] = df['RM']**2
-df['LSTAT_sqroot'] = df['LSTAT']**2
-df['ZN_times_NOX'] = df['ZN'] * df['NOX']
-df['CRIM_times_LSTAT'] = df['CRIM'] * df['LSTAT']
-df['DIS_times_RAD'] = df['DIS'] * df['RAD']
-df['CRIM_times_INDUS'] = df['CRIM'] * df['INDUS']
-df['AGE_squared'] = df['AGE']**1/2
-df['CRIM_squared'] = df['CRIM']**2
-df['ZN_times_PTRATIO'] = df['ZN'] * df['PTRATIO']
+df['RM_sqroot'] = df['RM']**2   # make it more effective and polynomial variables make the model more flexible
+df['LSTAT_sqroot'] = df['LSTAT']**2   # make it more effective
+df['ZN_times_NOX'] = df['ZN'] * df['NOX']   # more people more air pollution
+df['CRIM_times_LSTAT'] = df['CRIM'] * df['LSTAT']   # less wealth means more crime rate
+df['DIS_times_RAD'] = df['DIS'] * df['RAD']   # relation between distance and transportation to them
+df['CRIM_times_INDUS'] = df['CRIM'] * df['INDUS']   # more people more crime rate
+df['AGE_squared'] = df['AGE']**1/2   # make it more effective
+df['CRIM_squared'] = df['CRIM']**2   # make it more effective
+df['ZN_times_PTRATIO'] = df['ZN'] * df['PTRATIO']   # effect of education
 
 #####################################################################################################################
 ####################################### Encoding ####################################################################
@@ -430,9 +383,9 @@ plt.ylabel('Residuals')
 plt.title('Residuals vs Predicted  MEDV')
 plt.show()
 
-# Assuming X and y are already defined as features and target
-# and model is already trained
+#####################################################################################################################
 
+# Feature importance
 # Get the feature names from the DataFrame
 feature_names = X.columns
 
@@ -465,51 +418,3 @@ for bar in bars:
              va='center', ha='left', color='black')
 
 plt.show()
-
-
-X.head(25)
-
-
-
-
-
-
-
-
-
-# Calculate the IQR for the MEDV column
-Q1 = df['MEDV'].quantile(0.25)
-Q3 = df['MEDV'].quantile(0.75)
-IQR = Q3 - Q1
-
-# Define outlier criteria
-lower_bound = Q1 - 1.5 * IQR
-upper_bound = Q3 + 1.5 * IQR
-
-# Identify outliers
-outliers_medv = df[(df['MEDV'] < lower_bound) | (df['MEDV'] > upper_bound)]
-
-# Display rows with outliers in the MEDV column
-print(outliers_medv)
-
-
-
-
-import pandas as pd
-
-# Assuming 'df' is your DataFrame and 'MEDV' is the column of interest
-
-# Step 1: Filter out all rows where MEDV is 50
-rows_with_50k = df[df['MEDV'] == 50]
-
-# Step 2: Randomly select one of these rows to keep
-row_to_keep = rows_with_50k.sample(n=1, random_state=42)
-
-# Step 3: Filter out rows with MEDV = 50 from the main DataFrame
-df_filtered = df[df['MEDV'] != 50]
-
-# Step 4: Add the one row back to the filtered DataFrame
-df_final = pd.concat([df_filtered, row_to_keep], ignore_index=True)
-df = df_final
-
-# Now 'df_final' is your DataFrame with all rows where MEDV = 50 removed except one random row
